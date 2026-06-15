@@ -1,0 +1,45 @@
+{
+  "added_tokens_decoder": {
+    "0": {
+      "content": "__null__",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "1": {
+      "content": "__start__",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "2": {
+      "content": "__end__",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "3": {
+      "content": "__unk__",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    }
+  },
+  "backend": "custom",
+  "bos_token": "__start__",
+  "eos_token": "__end__",
+  "is_local": false,
+  "local_files_only": false,
+  "model_max_length": 512,
+  "pad_token": "__null__",
+  "tokenizer_class": "BlenderbotSmallTokenizer",
+  "unk_token": "__unk__"
+}

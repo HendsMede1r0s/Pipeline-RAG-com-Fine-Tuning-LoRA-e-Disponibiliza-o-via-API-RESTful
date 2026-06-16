@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LLM Lab · Chat</title>
+
+  <!-- Google Fonts: JetBrains Mono (código) + DM Sans (UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* =====================================================================
+       VARIÁVEIS CSS (Design Tokens)
+       Centraliza cores, espaçamentos e fontes para fácil customização
+       ===================================================================== */
+    :root {
+      --bg-primary:    #0d0f12;       /* fundo principal: preto-azulado */
+      --bg-secondary:  #13161b;       /* fundo das bolhas e painéis */
+      --bg-input:      #1a1e25;       /* fundo do campo de entrada */
+      --border:        #252a34;       /* bordas sutis */
+      --accent:        #00e5a0;       /* verde terminal: cor de destaque */
+      --accent-dim:    #00e5a020;     /* acento com baixa opacidade */
+      --text-primary:  #e8eaf0;       /* texto principal */
+      --text-secondary:#6b7280;       /* texto secundário/placeholder */
+      --text-code:     #a3e635;       /* verde código */
+      --user-bg:       #1e2433;       /* fundo das mensagens do usuário */
+      --model-bg:      #13161b;       /* fundo das mensagens do modelo */
+      --font-ui:       'DM Sans', sans-serif;
+      --font-mono:     'JetBrains Mono', monospace;
+      --radius:        10px;
+      --transition:    0.2s ease;
+    }
+
+    /* =====================================================================
+       RESET E BASE
+       ===================================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* =====================================================================
+       LAYOUT PRINCIPAL
+       Três colunas invisíveis: sidebar esquerda | chat central | vazio direito
+       ===================================================================== */
+    .app {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      gap: 24px;
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 4px;
+    }
+
+    /* Ícone de terminal animado */
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--accent);
+    }
+
+    .logo-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .logo-text span {
+      display: block;
+      font-size: 15px;
+      color: var(--text-primary);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    /* ── Seleção de modelo ──────────────────────────────────────────── */
+    .model-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    #model-select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 10px 12px;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color var(--transition);
+      outline: none;
+    }
+
+    #model-select:focus,
+    #model-select:hover {
+      border-color: var(--accent);
+    }
+
+    /* ── Badge de status do modelo ──────────────────────────────────── */
+    .model-badge {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Parâmetros do modelo ───────────────────────────────────────── */
+    .params-section {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .params-section label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .param-row span {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent);
+      min-width: 32px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      height: 3px;
+      -webkit-appearance: none;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform var(--transition);
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.3);
+    }
+
+    /* ── Info de tokens ─────────────────────────────────────────────── */
+    .token-info {
+      margin-top: auto;
+      padding: 12px;
+      background: var(--bg-input);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    .token-info .token-count {
+      font-size: 22px;
+      color: var(--text-primary);
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    /* ── Área central de chat ───────────────────────────────────────── */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header do chat */
+    .chat-header {
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-secondary);
+    }
+
+    .chat-title {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .chat-title span {
+      color: var(--accent);
+    }
+
+    /* Botão limpar conversa */
+    #clear-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    #clear-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Janela de mensagens */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      /* Scrollbar customizada */
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Tela de boas-vindas ─────────────────────────────────────────── */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .welcome-glyph {
+      font-family: var(--font-mono);
+      font-size: 48px;
+      color: var(--border);
+      line-height: 1;
+    }
+
+    .welcome h2 {
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text-primary);
+    }
+
+    .welcome p {
+      font-size: 13px;
+      max-width: 360px;
+      line-height: 1.8;
+    }
+
+    /* ── Bolhas de mensagem ──────────────────────────────────────────── */
+    .message {
+      padding: 16px 28px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user { background: var(--user-bg); }
+    .message.model { background: var(--model-bg); }
+
+    /* Avatar da mensagem */
+    .msg-avatar {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    .message.user .msg-avatar {
+      background: #2d3748;
+      color: var(--text-secondary);
+    }
+
+    .message.model .msg-avatar {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+
+    .msg-content {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .msg-role {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 500;
+      margin-bottom: 6px;
+      font-family: var(--font-mono);
+    }
+
+    .message.user .msg-role { color: var(--text-secondary); }
+    .message.model .msg-role { color: var(--accent); }
+
+    .msg-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Metadados: modelo usado e tokens */
+    .msg-meta {
+      margin-top: 8px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    /* ── Loading indicator ───────────────────────────────────────────── */
+    .loading-dots {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .loading-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: bounce 1.2s infinite;
+    }
+
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+      40%           { transform: scale(1.1); opacity: 1;   }
+    }
+
+    /* ── Área de input ────────────────────────────────────────────────── */
+    .input-area {
+      padding: 16px 24px 20px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+    }
+
+    .input-wrapper {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 10px 10px 16px;
+      transition: border-color var(--transition);
+    }
+
+    .input-wrapper:focus-within {
+      border-color: var(--accent);
+    }
+
+    #user-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.6;
+      resize: none;
+      max-height: 180px;
+      min-height: 24px;
+    }
+
+    #user-input::placeholder { color: var(--text-secondary); }
+
+    #send-btn {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #0d0f12;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity var(--transition), transform var(--transition);
+    }
+
+    #send-btn:hover:not(:disabled) { opacity: 0.85; transform: scale(1.05); }
+    #send-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    #send-btn svg { width: 16px; height: 16px; }
+
+    /* Hint de atalho */
+    .input-hint {
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      text-align: center;
+    }
+
+    /* ── Toast de erro ────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #3d1515;
+      border: 1px solid #7f3a3a;
+      color: #ffb3b3;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-mono);
+      opacity: 0;
+      transition: all 0.3s ease;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- ================================================================
+       SIDEBAR: Configurações do modelo
+       ================================================================ -->
+  <aside class="sidebar">
+
+    <!-- Logo / Identificação -->
+    <div class="sidebar-logo">
+      <div class="logo-icon">&gt;_</div>
+      <div class="logo-text">
+        My LLM
+        <span>Chat Interface</span>
+      </div>
+    </div>
+
+    <!-- Seleção de Modelo -->
+    <div class="model-section">
+      <label for="model-select">Modelo</label>
+      <!-- O select é populado dinamicamente via JavaScript (fetch /modelos) -->
+      <select id="model-select">
+        <option value="" disabled selected>Carregando...</option>
+      </select>
+
+      <!-- Badge com o modelo ativo -->
+      <div class="model-badge">
+        <div class="badge-dot"></div>
+        <span id="active-model-label">Nenhum selecionado</span>
+      </div>
+    </div>
+
+    <!-- Parâmetros de Geração -->
+    <div class="params-section">
+      <label>Parâmetros</label>
+
+      <!-- Temperatura: controla aleatoriedade da geração -->
+      <div>
+        <label for="temperature-range">
+          Temperatura <small style="color:var(--text-secondary)">(criatividade)</small>
+        </label>
+        <div class="param-row">
+          <input type="range" id="temperature-range" min="0.1" max="1.5" step="0.05" value="0.7">
+          <span id="temperature-val">0.7</span>
+        </div>
+      </div>
+
+      <!-- Max Tokens: tamanho máximo da resposta -->
+      <div>
+        <label for="maxtokens-range">Max Tokens</label>
+        <div class="param-row">
+          <input type="range" id="maxtokens-range" min="20" max="500" step="10" value="150">
+          <span id="maxtokens-val">150</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contador de tokens da última resposta -->
+    <div class="token-info">
+      <div class="token-count" id="last-token-count">—</div>
+      <div style="margin-top:4px">tokens na última resposta</div>
+    </div>
+
+  </aside>
+
+  <!-- ================================================================
+       ÁREA PRINCIPAL: Chat
+       ================================================================ -->
+  <main class="chat-area">
+
+    <!-- Header do chat -->
+    <header class="chat-header">
+      <div class="chat-title">
+        sessão <span id="session-id">#----</span>
+      </div>
+      <button id="clear-btn" title="Limpar conversa">
+        limpar
+      </button>
+    </header>
+
+    <!-- Janela de mensagens -->
+    <div id="messages">
+      <!-- Tela de boas-vindas (some ao receber a primeira mensagem) -->
+      <div class="welcome" id="welcome-screen">
+        <div class="welcome-glyph">{ }</div>
+        <h2>Laboratório de Modelos de Linguagem</h2>
+        <p>
+          Selecione um modelo na barra lateral, ajuste os parâmetros
+          e comece a digitar. Compare as respostas entre o modelo base
+          e o fine-tunado com LoRA.
+        </p>
+      </div>
+    </div>
+
+    <!-- Área de entrada de texto -->
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea
+          id="user-input"
+          rows="1"
+          placeholder="Digite sua mensagem..."
+          autofocus
+        ></textarea>
+
+        <!-- Botão Enviar -->
+        <button id="send-btn" title="Enviar (Enter)">
+          <!-- Ícone de seta para cima (SVG inline) -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"/>
+            <polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">Enter para enviar · Shift+Enter para nova linha</div>
+    </div>
+
+  </main>
+
+</div>
+
+<!-- Toast de erro (aparece ao fundo) -->
+<div class="toast" id="error-toast"></div>
+
+
+<script>
+// ============================================================================
+// JAVASCRIPT DO FRONT-END
+// ============================================================================
+// Responsabilidades:
+//   1. Carregar lista de modelos da API (/modelos)
+//   2. Enviar mensagens para a API (/chat)
+//   3. Renderizar mensagens do usuário e do modelo no chat
+//   4. Gerenciar estados (loading, erro, limpar)
+// ============================================================================
+
+// --- Referências aos elementos do DOM ---
+const modelSelect      = document.getElementById('model-select');
+const activeModelLabel = document.getElementById('active-model-label');
+const messagesEl       = document.getElementById('messages');
+const userInput        = document.getElementById('user-input');
+const sendBtn          = document.getElementById('send-btn');
+const clearBtn         = document.getElementById('clear-btn');
+const temperatureRange = document.getElementById('temperature-range');
+const temperatureVal   = document.getElementById('temperature-val');
+const maxtokensRange   = document.getElementById('maxtokens-range');
+const maxtokensVal     = document.getElementById('maxtokens-val');
+const lastTokenCount   = document.getElementById('last-token-count');
+const welcomeScreen    = document.getElementById('welcome-screen');
+const sessionIdEl      = document.getElementById('session-id');
+const errorToast       = document.getElementById('error-toast');
+
+// --- Estado da aplicação ---
+let isLoading = false;  // true enquanto aguarda resposta do servidor
+
+// Gera um ID de sessão aleatório (apenas visual/laboratório)
+sessionIdEl.textContent = '#' + Math.random().toString(36).slice(2, 6).toUpperCase();
+
+// ============================================================================
+// 1. CARREGAR MODELOS DISPONÍVEIS
+// ============================================================================
+async function carregarModelos() {
+  /**
+   * Faz GET /modelos e popula o <select> com os modelos disponíveis.
+   * Chamada na inicialização da página.
+   */
+  try {
+    const res = await fetch('/modelos');
+    const data = await res.json();  // { modelos: [{id, nome, descricao}, ...] }
+
+    // Limpa o select antes de popular
+    modelSelect.innerHTML = '';
+
+    if (data.modelos.length === 0) {
+      modelSelect.innerHTML = '<option disabled>Nenhum modelo disponível</option>';
+      return;
+    }
+
+    // Cria um <option> para cada modelo retornado pela API
+    data.modelos.forEach((m, index) => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.nome;
+      opt.title = m.descricao;
+      if (index === 0) opt.selected = true;  // Seleciona o primeiro por padrão
+      modelSelect.appendChild(opt);
+    });
+
+    // Atualiza o badge com o modelo selecionado
+    atualizarBadgeModelo();
+
+  } catch (err) {
+    // Se a API não responder, mostra mensagem de erro
+    modelSelect.innerHTML = '<option disabled>Erro ao carregar</option>';
+    mostrarErro('Não foi possível conectar ao servidor.');
+    console.error('Erro ao carregar modelos:', err);
+  }
+}
+
+// Atualiza o badge que mostra o modelo ativo na sidebar
+function atualizarBadgeModelo() {
+  const opt = modelSelect.options[modelSelect.selectedIndex];
+  activeModelLabel.textContent = opt ? opt.textContent : 'Nenhum selecionado';
+}
+
+// Atualiza badge quando o usuário muda o modelo no select
+modelSelect.addEventListener('change', atualizarBadgeModelo);
+
+// ============================================================================
+// 2. ATUALIZAR DISPLAYS DE PARÂMETROS (Temperatura e Max Tokens)
+// ============================================================================
+
+// Atualiza o display numérico ao mover o slider de temperatura
+temperatureRange.addEventListener('input', () => {
+  temperatureVal.textContent = temperatureRange.value;
+});
+
+// Atualiza o display numérico ao mover o slider de max tokens
+maxtokensRange.addEventListener('input', () => {
+  maxtokensVal.textContent = maxtokensRange.value;
+});
+
+// ============================================================================
+// 3. AUTO-RESIZE DO TEXTAREA
+// ============================================================================
+// Faz o campo de texto crescer conforme o usuário digita
+userInput.addEventListener('input', () => {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 180) + 'px';
+});
+
+// ============================================================================
+// 4. ENVIO COM ENTER (Shift+Enter = nova linha)
+// ============================================================================
+userInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();   // Evita nova linha
+    enviarMensagem();
+  }
+});
+
+sendBtn.addEventListener('click', enviarMensagem);
+
+// ============================================================================
+// 5. ENVIAR MENSAGEM E RECEBER RESPOSTA
+// ============================================================================
+async function enviarMensagem() {
+  /**
+   * Função principal: coleta o texto do usuário, envia para /chat,
+   * aguarda a resposta e a renderiza no chat.
+   */
+
+  // Não faz nada se já estiver carregando ou o campo estiver vazio
+  if (isLoading) return;
+  const texto = userInput.value.trim();
+  if (!texto) return;
+
+  const modeloId = modelSelect.value;
+  if (!modeloId) {
+    mostrarErro('Selecione um modelo antes de enviar.');
+    return;
+  }
+
+  // --- Esconde a tela de boas-vindas na primeira mensagem ---
+  if (welcomeScreen.style.display !== 'none') {
+    welcomeScreen.style.display = 'none';
+  }
+
+  // --- Renderiza a mensagem do usuário ---
+  adicionarMensagem('user', texto);
+
+  // --- Limpa o input e desabilita botão enquanto carrega ---
+  userInput.value = '';
+  userInput.style.height = 'auto';
+  setLoading(true);
+
+  // --- Mostra o indicador de "digitando..." do modelo ---
+  const loadingEl = adicionarLoading();
+
+  try {
+    // Monta o payload conforme o schema ChatRequest do back-end
+    const payload = {
+      modelo: modeloId,
+      mensagem: texto,
+      max_tokens: parseInt(maxtokensRange.value),
+      temperatura: parseFloat(temperatureRange.value)
+    };
+
+    // POST /chat: envia a mensagem e aguarda a resposta
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // Remove o indicador de loading
+    loadingEl.remove();
+
+    if (!res.ok) {
+      // Trata erros HTTP (400, 404, 500, etc.)
+      const err = await res.json();
+      throw new Error(err.detail || `Erro HTTP ${res.status}`);
+    }
+
+    // Parseia a resposta: { resposta, modelo, tokens_gerados }
+    const data = await res.json();
+
+    // Renderiza a resposta do modelo
+    adicionarMensagem('model', data.resposta, {
+      modelo: data.modelo,
+      tokens: data.tokens_gerados
+    });
+
+    // Atualiza o contador de tokens na sidebar
+    lastTokenCount.textContent = data.tokens_gerados;
+
+  } catch (err) {
+    // Remove loading e mostra erro
+    loadingEl.remove();
+    mostrarErro(err.message);
+    console.error('Erro ao enviar mensagem:', err);
+  } finally {
+    // Sempre reabilita o input ao finalizar (com ou sem erro)
+    setLoading(false);
+    userInput.focus();
+  }
+}
+
+// ============================================================================
+// 6. FUNÇÕES DE RENDERIZAÇÃO DE MENSAGENS
+// ============================================================================
+
+function adicionarMensagem(tipo, texto, meta = null) {
+  /**
+   * Cria e insere uma bolha de mensagem no chat.
+   *
+   * @param tipo  - 'user' ou 'model'
+   * @param texto - conteúdo da mensagem
+   * @param meta  - objeto opcional com { modelo, tokens } (apenas para 'model')
+   */
+  const div = document.createElement('div');
+  div.className = `message ${tipo}`;
+
+  // Avatar (iniciais do remetente)
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = tipo === 'user' ? 'EU' : 'AI';
+
+  // Conteúdo
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+
+  // Role label (Você / Modelo)
+  const role = document.createElement('div');
+  role.className = 'msg-role';
+  role.textContent = tipo === 'user' ? 'Você' : 'Modelo';
+
+  // Texto da mensagem
+  const textEl = document.createElement('div');
+  textEl.className = 'msg-text';
+  textEl.textContent = texto;  // textContent previne XSS
+
+  content.appendChild(role);
+  content.appendChild(textEl);
+
+  // Metadados (modelo usado + tokens) apenas para respostas do modelo
+  if (meta && tipo === 'model') {
+    const metaEl = document.createElement('div');
+    metaEl.className = 'msg-meta';
+    metaEl.textContent = `${meta.modelo} · ${meta.tokens} tokens`;
+    content.appendChild(metaEl);
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(content);
+  messagesEl.appendChild(div);
+
+  // Scroll automático para a mensagem mais recente
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  return div;
+}
+
+function adicionarLoading() {
+  /**
+   * Adiciona um indicador de "modelo está gerando..." (pontos animados).
+   * Retorna o elemento para que possa ser removido depois.
+   */
+  const div = document.createElement('div');
+  div.className = 'message model';
+  div.innerHTML = `
+    <div class="msg-avatar">AI</div>
+    <div class="msg-content">
+      <div class="msg-role">Modelo</div>
+      <div class="loading-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  `;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+// ============================================================================
+// 7. ESTADO DE LOADING
+// ============================================================================
+function setLoading(estado) {
+  /**
+   * Habilita/desabilita o botão de envio e o campo de texto.
+   * Impede duplo-envio enquanto o modelo está gerando.
+   */
+  isLoading = estado;
+  sendBtn.disabled = estado;
+  userInput.disabled = estado;
+}
+
+// ============================================================================
+// 8. LIMPAR CONVERSA
+// ============================================================================
+clearBtn.addEventListener('click', () => {
+  // Remove todas as mensagens
+  messagesEl.innerHTML = '';
+  // Reexibe a tela de boas-vindas
+  welcomeScreen.style.display = '';
+  messagesEl.appendChild(welcomeScreen);
+  // Reseta o contador de tokens
+  lastTokenCount.textContent = '—';
+});
+
+// ============================================================================
+// 9. TOAST DE ERRO
+// ============================================================================
+function mostrarErro(msg) {
+  /**
+   * Exibe uma notificação de erro no rodapé por 4 segundos.
+   */
+  errorToast.textContent = '⚠ ' + msg;
+  errorToast.classList.add('show');
+  setTimeout(() => errorToast.classList.remove('show'), 4000);
+}
+
+// ============================================================================
+// INICIALIZAÇÃO
+// ============================================================================
+// Carrega os modelos assim que a página estiver pronta
+carregarModelos();
+</script>
+
+</body>
+</html>
